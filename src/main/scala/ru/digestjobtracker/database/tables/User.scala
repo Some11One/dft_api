@@ -1,57 +1,53 @@
 package ru.digestjobtracker.database.tables
 
-import org.json.JSONArray
-import org.json.JSONObject
 import java.sql.{ResultSet, SQLException}
 
 import ru.digestjobtracker.database.DatabaseSettings
+import ru.digestjobtracker.database.tables.User.{FieldID, FieldName, Table}
+import ru.digestjobtracker.exceptions.UserNotFoundException
 
-class User extends DatabaseSettings {
+import scala.collection.mutable.{ListBuffer, Seq}
 
-  private val testUserId = 42
+case class User() extends DatabaseSettings {
 
-  override def insert(): Unit = {
+  def insert(name: String): UserDAO = {
     val s = connect().createStatement()
     try {
-      s.execute(s"insert into Users (user_id) VALUES ('$testUserId');")
-    } catch {
-      case e: SQLException =>
-        e.printStackTrace()
+      s.execute(s"INSERT INTO $Table ($FieldName) VALUES ('$name');")
+      val userID = s.executeQuery(s"SELECT max($FieldID) FROM $Table")
+      if (userID.next()) {
+        UserDAO(userID.getString("max"), name)
+      } else {
+        throw new UserNotFoundException()
+      }
     } finally {
       if (s != null) s.close()
     }
   }
 
-  //  def selectUser(userId: String): Option[JSONObject] = {
-  //    val s = connect().createStatement()
-  //    try {
-  //      val res: ResultSet = s.executeQuery(s"select user_id from Users where user_id = $userId")
-  //      if (res.next()) {
-  //        Option(new JSONObject().put("user_id", res.getString("user_id")))
-  //      } else {
-  //        _
-  //      }
-  //    } catch {
-  //      case e: SQLException =>
-  //        throw e
-  //    } finally {
-  //      if (s != null) s.close()
-  //    }
-  //  }
-
-  def selectAll(): String = {
-    val users = new JSONArray()
+  def selectUser(userId: String): UserDAO = {
     val s = connect().createStatement()
     try {
-      val res: ResultSet = s.executeQuery(s"select user_id from Users")
-      while (res.next()) {
-        val user_id = res.getString("user_id")
-        users.put(new JSONObject().put("user_id", user_id))
+      val res: ResultSet = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $userId")
+      if (res.next()) {
+        UserDAO(res.getString(FieldID), res.getString(FieldName))
+      } else {
+        throw new UserNotFoundException()
       }
-      users.toString()
-    } catch {
-      case e: SQLException =>
-        throw e
+    } finally {
+      if (s != null) s.close()
+    }
+  }
+
+  def selectAll(): ListBuffer[UserDAO] = {
+    val users = new ListBuffer[UserDAO]()
+    val s = connect().createStatement()
+    try {
+      val res: ResultSet = s.executeQuery(s"SELECT * FROM $Table")
+      while (res.next()) {
+        users += UserDAO(res.getString(FieldID), res.getString(FieldName))
+      }
+      users
     } finally {
       if (s != null) s.close()
     }
@@ -60,7 +56,8 @@ class User extends DatabaseSettings {
   def createTable(): Unit = {
     val s = connect().createStatement()
     try {
-      s.execute("CREATE TABLE Users ( user_id int4 NOT NULL, CONSTRAINT Users_pk PRIMARY KEY (user_id));")
+      s.execute(s"DROP TABLE $Table")
+      s.execute(s"CREATE TABLE $Table ( $FieldID SERIAL, $FieldName varchar);")
     } catch {
       case e: SQLException =>
         e.printStackTrace()
@@ -69,3 +66,12 @@ class User extends DatabaseSettings {
     }
   }
 }
+
+object User {
+  val Table = "Users"
+
+  val FieldID = "id"
+  val FieldName = "name"
+}
+
+case class UserDAO(fieldID: String, fieldName: String)

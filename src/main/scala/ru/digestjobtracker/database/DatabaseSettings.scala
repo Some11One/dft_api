@@ -1,6 +1,6 @@
 package ru.digestjobtracker.database
 
-import java.sql.{Connection, DriverManager, SQLException}
+import java.sql.{Connection, DriverManager}
 
 trait DatabaseSettings {
 
@@ -9,8 +9,6 @@ trait DatabaseSettings {
   private val PASSWORD = "pass17"
 
   def createTable(): Unit
-
-  def insert(): Unit
 
   def connect(): Connection = {
     Class.forName("org.postgresql.Driver")
