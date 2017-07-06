@@ -17,15 +17,22 @@ case class Job() extends DatabaseSettings {
       val res: ResultSet = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldUserID = $userId")
       while (res.next()) {
 
+        val timestampCreateElem = res.getString(FieldTimestampCreate)
+        var timestampCreate: Option[Long] = None
+        if (timestampCreateElem != null) {
+          timestampCreate = Option(timestampCreateElem.toLong)
+        }
+
         val timestampEndElem = res.getString(FieldTimestampEnd)
         var timestampEnd: Option[Long] = None
         if (timestampEndElem != null) {
           timestampEnd = Option(timestampEndElem.toLong)
         }
 
-        jobs += JobDAO(fieldID = Option(res.getString(FieldID).toInt), fieldUserID = userId.toInt, fieldState = res.getString(FieldState).toInt,
-          fieldTimestampCreate = Option(res.getString(FieldTimestampCreate).toLong), fieldTimestampEnd = timestampEnd,
-          fieldSrc = res.getString(FieldSrc), fieldAlgo = res.getString(FieldAlgo))
+        jobs += JobDAO(fieldID = res.getString(FieldID).toInt, fieldUserID = userId.toInt, fieldState = res.getString(FieldState).toInt,
+          fieldTimestampCreate = timestampCreate, fieldTimestampEnd = timestampEnd,
+          fieldSrc = res.getString(FieldSrc), fieldAlgo = res.getString(FieldAlgo),
+          fieldHex = Option(res.getString(FieldHex)), fieldError = Option(res.getString(FieldError)))
       }
       jobs
     } finally {
@@ -33,12 +40,21 @@ case class Job() extends DatabaseSettings {
     }
   }
 
-  def updateJob(jobId: Int, state: Int, timestampEnd: Long, hex: String, error: String): Unit = {
+  def deleteJob(jobId: String): Unit = {
+    val s = connect().createStatement()
+    try {
+      s.execute(s"DELETE FROM $Table WHERE $FieldID = $jobId")
+    } finally {
+      if (s != null) s.close()
+    }
+  }
+
+  def updateJob(jobId: Int, state: Int, timestampCreate: Long): Unit = {
     val s = connect().createStatement()
     try {
       val res = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $jobId")
       if (res.next()) {
-        s.execute(s"UPDATE $Table SET ( $FieldTimestampEnd, $FieldState, $FieldHex, $FieldError) = ($timestampEnd, $state $hex, $error) WHERE id = $jobId")
+        s.execute(s"UPDATE $Table SET ( $FieldTimestampCreate, $FieldState) = ('$timestampCreate', '$state') WHERE $FieldID = $jobId")
       } else {
         throw new JobNotFoundException()
       }
@@ -47,14 +63,43 @@ case class Job() extends DatabaseSettings {
     }
   }
 
-
-  def insertJob(userId: Int, state: Int, src: String, algo: String, timestampCreate: Long): JobDAO = {
+  def updateJobKo(jobId: Int, state: Int, timestampCreate: Long,
+                  timestampEnd: Option[Long], error: Option[String]): Unit = {
     val s = connect().createStatement()
     try {
-      s.execute(s"INSERT INTO $Table ($FieldUserID, $FieldState, $FieldSrc, $FieldAlgo, $FieldTimestampCreate) VALUES ('$userId, $state, $src, $algo, $timestampCreate');")
+      val res = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $jobId")
+      if (res.next()) {
+        s.execute(s"UPDATE $Table SET ( $FieldTimestampCreate, $FieldTimestampEnd, $FieldState, $FieldError) = ('$timestampCreate', '${timestampEnd.get}', '$state', '${error.get}') WHERE $FieldID = $jobId")
+      } else {
+        throw new JobNotFoundException()
+      }
+    } finally {
+      if (s != null) s.close()
+    }
+  }
+
+  def updateJobOk(jobId: Int, state: Int, timestampCreate: Long,
+                  timestampEnd: Option[Long], hex: Option[String]): Unit = {
+    val s = connect().createStatement()
+    try {
+      val res = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $jobId")
+      if (res.next()) {
+        s.execute(s"UPDATE $Table SET ( $FieldTimestampCreate, $FieldTimestampEnd, $FieldState, $FieldHex) = ('$timestampCreate', '${timestampEnd.get}', '$state', '${hex.get}') WHERE $FieldID = $jobId")
+      } else {
+        throw new JobNotFoundException()
+      }
+    } finally {
+      if (s != null) s.close()
+    }
+  }
+
+  def insertJob(userId: Int, state: Int, src: String, algo: String): JobDAO = {
+    val s = connect().createStatement()
+    try {
+      s.execute(s"INSERT INTO $Table ($FieldUserID, $FieldState, $FieldSrc, $FieldAlgo) VALUES ('$userId', '$state', '$src', '$algo');")
       val jobID = s.executeQuery(s"SELECT max($FieldID) FROM $Table")
       if (jobID.next()) {
-        JobDAO(fieldID = Option(jobID.getString("max").toInt), fieldUserID = userId, fieldState = state, fieldSrc = src, fieldAlgo = algo)
+        JobDAO(fieldID = jobID.getString("max").toInt, fieldUserID = userId, fieldState = state, fieldSrc = src, fieldAlgo = algo)
       } else {
         throw new JobNotFoundException()
       }
@@ -81,7 +126,7 @@ case class Job() extends DatabaseSettings {
 object Job {
   val Table: String = "Jobs"
 
-  val FieldID = "id"
+  val FieldID = "job_id"
   val FieldUserID = "user_id"
   val FieldState = "state"
   val FieldTimestampCreate = "timestamp_create"
@@ -92,6 +137,6 @@ object Job {
   val FieldError = "error"
 }
 
-case class JobDAO(fieldID: Option[Int] = None, fieldUserID: Int, fieldState: Int,
+case class JobDAO(fieldID: Int, fieldUserID: Int, fieldState: Int,
                   fieldTimestampCreate: Option[Long] = None, fieldTimestampEnd: Option[Long] = None,
                   fieldSrc: String, fieldAlgo: String, fieldHex: Option[String] = None, fieldError: Option[String] = None)

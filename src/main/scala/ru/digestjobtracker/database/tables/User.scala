@@ -90,7 +90,7 @@ case class User() extends DatabaseSettings {
 object User {
   val Table = "Users"
 
-  val FieldID = "id"
+  val FieldID = "user_id"
   val FieldName = "name"
 }
 

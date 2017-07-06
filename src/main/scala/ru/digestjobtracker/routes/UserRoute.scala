@@ -11,7 +11,7 @@ class UserRoute {
     * GET, get user
     *
     * Request headers:
-    * 'id' - header, representing user's unique identifier. If none specified - all users will be loaded from DB
+    * 'user_id' - header, representing user's unique identifier. If none specified - all users will be loaded from DB
     *
     */
   def read(request: Request, response: Response): String = {

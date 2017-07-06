@@ -20,6 +20,8 @@ class NoSrcException extends ApiException(400, 3, "'src' query parameter not fou
 
 class NoUserException extends ApiException(404, 4, "'user_id' header not specified")
 
+class NoJobException extends ApiException(404, 5, "'job_id' query parameter not specified")
+
 // not found
 
 class UserNotFoundException extends ApiException(404, 50, "User not found")

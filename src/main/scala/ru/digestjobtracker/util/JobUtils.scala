@@ -4,13 +4,12 @@ import java.util.Calendar
 
 import ru.digestjobtracker.database.tables.{Job, JobDAO, UserDAO}
 import ru.digestjobtracker.exceptions.AlgoTypeException
-import ru.digestjobtracker.util.ManagerUtils.simpleErrorResponse
+import ru.digestjobtracker.util.JobUtils.MaxRunningThreads
 
 import scala.collection.mutable
 import scala.io.Source
-import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
-import JobUtils.MaxRunningThreads
+import java.util.concurrent.ConcurrentHashMap
 
 /**
   * Created by ndmelentev on 05.07.17.
@@ -18,6 +17,7 @@ import JobUtils.MaxRunningThreads
 class JobUtils {
 
   private val usersJobs = new ConcurrentHashMap[UserDAO, mutable.Queue[JobDAO]]()
+  private val cancelledUsersJobs = new ConcurrentHashMap[UserDAO, mutable.ListBuffer[Int]]()
   @volatile private var runningThreads = 0
 
   {
@@ -30,24 +30,44 @@ class JobUtils {
 
   def addUserJob(userDAO: UserDAO, src: String, algo: String): Unit = {
     val userJobs = usersJobs.getOrDefault(userDAO, mutable.Queue.empty)
-    userJobs += JobDAO(fieldUserID = userDAO.fieldID, fieldState = 1, fieldSrc = src, fieldAlgo = algo)
-    usersJobs.put(userDAO, userJobs)
+    val jobDAO = Job().insertJob(userDAO.fieldID, 1, src, algo)
+    userJobs += JobDAO(fieldID = jobDAO.fieldID, fieldUserID = userDAO.fieldID, fieldState = 1, fieldSrc = src, fieldAlgo = algo)
+    if (usersJobs.containsKey(userDAO)) {
+      usersJobs.replace(userDAO, userJobs)
+    } else {
+      usersJobs.put(userDAO, userJobs)
+    }
+  }
+
+  def cancelUserJob(userDAO: UserDAO, jobId: String): Unit = {
+    val userJobs = cancelledUsersJobs.getOrDefault(userDAO, mutable.ListBuffer.empty)
+    userJobs += jobId.toInt
+    if (cancelledUsersJobs.containsKey(userDAO)) {
+      cancelledUsersJobs.replace(userDAO, userJobs)
+    } else {
+      cancelledUsersJobs.put(userDAO, userJobs)
+    }
   }
 
   def processJobs(): Unit = {
     new Thread(new Runnable {
       override def run(): Unit = {
         while (true) {
-          val keySetIterator = usersJobs.keySet().iterator
+          val iter = usersJobs.keySet().iterator()
           while ( {
-            keySetIterator.hasNext
+            iter.hasNext
           }) {
-            val userDAO = keySetIterator.next()
+            val userDAO = iter.next()
             val userJobs = usersJobs.get(userDAO)
-            for (jobDAO <- userJobs) {
-              if (runningThreads <= MaxRunningThreads) {
+            val userCancelledJobs = cancelledUsersJobs.get(userDAO)
+            while ( {
+              userJobs.nonEmpty && runningThreads <= MaxRunningThreads
+            }) {
+              val jobDAO = userJobs.dequeue()
+              if (userCancelledJobs == null || !userCancelledJobs.contains(jobDAO.fieldID)) {
+                usersJobs.replace(userDAO, userJobs)
                 runningThreads += 1
-                startUserJob(userDAO, jobDAO.fieldSrc, jobDAO.fieldAlgo)
+                startUserJob(jobDAO)
               }
             }
           }
@@ -57,42 +77,42 @@ class JobUtils {
     }).start()
   }
 
-  def startUserJob(userDAO: UserDAO, src: String, algo: String): Unit = {
+  def startUserJob(jobDAO: JobDAO): Unit = {
 
     // state 2 - create job instance in db
     val timestampCreate = Calendar.getInstance().getTimeInMillis
-    val jobDAO = Job().insertJob(userDAO.fieldID, 2, src, algo, timestampCreate)
+    Job().updateJob(jobDAO.fieldID, jobDAO.fieldState + 1, timestampCreate)
 
     new Thread(new Runnable {
       override def run(): Unit = {
         try {
-          val text = Source.fromURL(src)("UTF-8").mkString
+          val text = Source.fromURL(jobDAO.fieldSrc)("UTF-8").mkString
           try {
-            val hexResult = AlgoUtils.getHex(text, algo)
+            val hexResult = AlgoUtils.getHex(text, jobDAO.fieldAlgo)
             val timestampEnd = Calendar.getInstance().getTimeInMillis
-            // state 3
-            Job().updateJob(jobDAO.fieldID.get, 3, timestampEnd, hexResult, null)
+            // state 3 - ok algo result
+            Job().updateJobOk(jobDAO.fieldID, jobDAO.fieldState + 1, timestampCreate, Option(timestampEnd), Option(hexResult))
             runningThreads -= 1
           } catch {
             case e: AlgoTypeException =>
               e.printStackTrace()
-              // state 4
+              // state 4 - error while executing algo
               val timestampEnd = Calendar.getInstance().getTimeInMillis
-              Job().updateJob(jobDAO.fieldID.get, 4, timestampEnd, null, e.getStackTrace.toString)
+              Job().updateJobKo(jobDAO.fieldID, jobDAO.fieldState + 1, timestampCreate, Option(timestampEnd), Option(e.toString))
               runningThreads -= 1
             case e: Exception =>
               e.printStackTrace()
-              // state 4
+              // state 4 - error while executing algo
               val timestampEnd = Calendar.getInstance().getTimeInMillis
-              Job().updateJob(jobDAO.fieldID.get, 4, timestampEnd, null, e.getStackTrace.toString)
+              Job().updateJobKo(jobDAO.fieldID, jobDAO.fieldState + 1, timestampCreate, Option(timestampEnd), Option(e.toString))
               runningThreads -= 1
           }
         } catch {
           case e: Exception =>
             e.printStackTrace()
-            // state 4
+            // state 4 - error while executing algo
             val timestampEnd = Calendar.getInstance().getTimeInMillis
-            Job().updateJob(jobDAO.fieldID.get, 4, timestampEnd, null, e.getStackTrace.toString)
+            Job().updateJobKo(jobDAO.fieldID, jobDAO.fieldState + 1, timestampCreate, Option(timestampEnd), Option(e.toString))
             runningThreads -= 1
             throw e
         }
