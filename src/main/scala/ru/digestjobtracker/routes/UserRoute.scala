@@ -10,17 +10,17 @@ class UserRoute {
   /**
     * GET, get user
     *
-    * Request can have:
-    * 'id' - header, representing user's unique identifier (Text). If none - all users will be loaded from DB
+    * Request headers:
+    * 'id' - header, representing user's unique identifier. If none specified - all users will be loaded from DB
     *
     */
   def read(request: Request, response: Response): String = {
-    val userID = request.getHeader(User.FieldID)
-    if (userID == null) {
-      userListingResponse(User().selectAll())
+    val id = request.getHeader(User.FieldID)
+    if (id == null) {
+      userListingResponse(User().selectAllUsers())
     } else {
       try {
-        userResponse(User().selectUser(userID))
+        userResponse(User().selectUser(id))
       } catch {
         case e: UserNotFoundException =>
           e.printStackTrace()
@@ -33,18 +33,16 @@ class UserRoute {
     * POST, creating user
     *
     * Request query params:
-    * 'name' - representing user's name
+    * 'name' - user's name. If none specified - blank user name
     *
     */
   def create(request: Request, response: Response): String = {
     try {
-      val name = request.getHeader("name")
+      val name = request.getHeader(User.FieldName)
       if (name == null) {
-        val user = User().insert("")
-        userResponse(user)
+        userResponse(User().insertUser(""))
       } else {
-        val user = User().insert(name)
-        userResponse(user)
+        userResponse(User().insertUser(name))
       }
     } catch {
       case e: UserNotFoundException =>

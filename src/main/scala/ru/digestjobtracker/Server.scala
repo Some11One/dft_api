@@ -4,7 +4,7 @@ import java.io.IOException
 
 import io.netty.handler.codec.http.HttpMethod
 import org.restexpress.RestExpress
-import ru.digestjobtracker.routes.UserRoute
+import ru.digestjobtracker.routes.{JobRoute, UserRoute}
 
 object Server {
   private val defaultServerPort = 8889
@@ -35,6 +35,11 @@ object Server {
     val userRoute = new UserRoute()
     server.uri("v1/user", userRoute).method(HttpMethod.GET).noSerialization
     server.uri("v1/user", userRoute).method(HttpMethod.POST).noSerialization
+
+    val jobRoute = new JobRoute()
+    server.uri("v1/job", jobRoute).method(HttpMethod.GET).noSerialization
+    server.uri("v1/job", jobRoute).method(HttpMethod.POST).noSerialization
+    server.uri("v1/job", jobRoute).method(HttpMethod.DELETE).noSerialization
 
     if (args.length >= 1) {
       val port = Integer.valueOf(args(0))

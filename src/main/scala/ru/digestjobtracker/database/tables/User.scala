@@ -6,17 +6,23 @@ import ru.digestjobtracker.database.DatabaseSettings
 import ru.digestjobtracker.database.tables.User.{FieldID, FieldName, Table}
 import ru.digestjobtracker.exceptions.UserNotFoundException
 
-import scala.collection.mutable.{ListBuffer, Seq}
+import scala.collection.mutable.ListBuffer
 
 case class User() extends DatabaseSettings {
 
-  def insert(name: String): UserDAO = {
+  /**
+    * Insert new User instance into DB
+    *
+    * @param name user name
+    * @return user id
+    */
+  def insertUser(name: String): UserDAO = {
     val s = connect().createStatement()
     try {
       s.execute(s"INSERT INTO $Table ($FieldName) VALUES ('$name');")
       val userID = s.executeQuery(s"SELECT max($FieldID) FROM $Table")
       if (userID.next()) {
-        UserDAO(userID.getString("max"), name)
+        UserDAO(userID.getString("max").toInt, name)
       } else {
         throw new UserNotFoundException()
       }
@@ -25,12 +31,18 @@ case class User() extends DatabaseSettings {
     }
   }
 
+  /**
+    * Get user from DB
+    *
+    * @param userId user id
+    * @return user
+    */
   def selectUser(userId: String): UserDAO = {
     val s = connect().createStatement()
     try {
       val res: ResultSet = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $userId")
       if (res.next()) {
-        UserDAO(res.getString(FieldID), res.getString(FieldName))
+        UserDAO(res.getString(FieldID).toInt, res.getString(FieldName))
       } else {
         throw new UserNotFoundException()
       }
@@ -39,13 +51,18 @@ case class User() extends DatabaseSettings {
     }
   }
 
-  def selectAll(): ListBuffer[UserDAO] = {
+  /**
+    * Get all users from DB
+    *
+    * @return list of users
+    */
+  def selectAllUsers(): ListBuffer[UserDAO] = {
     val users = new ListBuffer[UserDAO]()
     val s = connect().createStatement()
     try {
       val res: ResultSet = s.executeQuery(s"SELECT * FROM $Table")
       while (res.next()) {
-        users += UserDAO(res.getString(FieldID), res.getString(FieldName))
+        users += UserDAO(res.getString(FieldID).toInt, res.getString(FieldName))
       }
       users
     } finally {
@@ -53,6 +70,9 @@ case class User() extends DatabaseSettings {
     }
   }
 
+  /**
+    * Create table of users
+    */
   def createTable(): Unit = {
     val s = connect().createStatement()
     try {
@@ -74,4 +94,4 @@ object User {
   val FieldName = "name"
 }
 
-case class UserDAO(fieldID: String, fieldName: String)
+case class UserDAO(fieldID: Int, fieldName: String)
