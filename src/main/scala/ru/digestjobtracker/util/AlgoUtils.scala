@@ -5,6 +5,9 @@ import ru.digestjobtracker.exceptions.AlgoTypeException
 
 /**
   * Created by ndmelentev on 04.07.17.
+  *
+  * Class to implement hex algorithms
+  *
   */
 object AlgoUtils {
 

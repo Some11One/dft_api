@@ -32,6 +32,20 @@ case class User() extends DatabaseSettings {
   }
 
   /**
+    * Remove User instance from DB
+    *
+    * @param userId user id
+    */
+  def deleteUser(userId: String): Unit = {
+    val s = connect().createStatement()
+    try {
+      s.execute(s"DELETE FROM $Table WHERE $FieldID = $userId;")
+    } finally {
+      if (s != null) s.close()
+    }
+  }
+
+  /**
     * Get user from DB
     *
     * @param userId user id
@@ -90,7 +104,7 @@ case class User() extends DatabaseSettings {
 object User {
   val Table = "Users"
 
-  val FieldID = "user_id"
+  val FieldID = "user_id" // pk
   val FieldName = "name"
 }
 

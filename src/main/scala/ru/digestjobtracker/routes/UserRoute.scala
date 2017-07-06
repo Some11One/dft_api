@@ -3,7 +3,8 @@ package ru.digestjobtracker.routes
 import org.restexpress.{Request, Response}
 import ru.digestjobtracker.database.tables.User
 import ru.digestjobtracker.exceptions.UserNotFoundException
-import ru.digestjobtracker.util.ManagerUtils.{simpleErrorResponse, userResponse, userListingResponse}
+import ru.digestjobtracker.managers.UserManager
+import ru.digestjobtracker.util.ManagerUtils.{simpleErrorResponse, userListingResponse}
 
 class UserRoute {
 
@@ -15,35 +16,25 @@ class UserRoute {
     *
     */
   def read(request: Request, response: Response): String = {
-    val id = request.getHeader(User.FieldID)
-    if (id == null) {
-      userListingResponse(User().selectAllUsers())
-    } else {
-      try {
-        userResponse(User().selectUser(id))
-      } catch {
+    try {
+      userListingResponse(UserManager().read(request.getHeader(User.FieldID)))
+    } catch {
         case e: UserNotFoundException =>
           e.printStackTrace()
           simpleErrorResponse(e)
       }
     }
-  }
 
   /**
     * POST, creating user
     *
     * Request query params:
-    * 'name' - user's name. If none specified - blank user name
+    * 'name' - user's name. If none specified - blank user name will be used
     *
     */
   def create(request: Request, response: Response): String = {
     try {
-      val name = request.getHeader(User.FieldName)
-      if (name == null) {
-        userResponse(User().insertUser(""))
-      } else {
-        userResponse(User().insertUser(name))
-      }
+      userListingResponse(UserManager().create(request.getHeader(User.FieldName)))
     } catch {
       case e: UserNotFoundException =>
         e.printStackTrace()

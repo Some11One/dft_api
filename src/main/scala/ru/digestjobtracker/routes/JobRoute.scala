@@ -1,9 +1,9 @@
 package ru.digestjobtracker.routes
 
 import org.restexpress.{Request, Response}
-import ru.digestjobtracker.database.tables.{Job, JobDAO, User}
+import ru.digestjobtracker.database.tables.Job
 import ru.digestjobtracker.exceptions._
-import ru.digestjobtracker.util.JobUtils
+import ru.digestjobtracker.managers.JobManager
 import ru.digestjobtracker.util.ManagerUtils.{simpleErrorResponse, simpleSuccessResponse, userJobsResponse}
 
 /**
@@ -19,19 +19,13 @@ class JobRoute {
     *
     */
   def read(request: Request, response: Response): String = {
-    //    Job().createTable()
-    val userId = request.getHeader(Job.FieldUserID)
-    if (userId == null) {
-      simpleErrorResponse(new NoUserException)
-    } else {
-      try {
-        val userDAO = User().selectUser(userId)
-        userJobsResponse(userDAO, Job().selectAllUserJobs(userId))
-      } catch {
-        case e: UserNotFoundException =>
-          e.printStackTrace()
-          simpleErrorResponse(e)
-      }
+    try {
+      val m = JobManager().read(request.getHeader(Job.FieldUserID))
+      userJobsResponse(m._1, m._2)
+    } catch {
+      case e: ApiException =>
+        e.printStackTrace()
+        simpleErrorResponse(e)
     }
   }
 
@@ -47,30 +41,14 @@ class JobRoute {
     *
     */
   def create(request: Request, response: Response): String = {
-
-    val userId = request.getHeader(Job.FieldUserID)
-    if (userId == null) {
-      simpleErrorResponse(new NoUserException)
-    } else {
-      try {
-        val userDAO = User().selectUser(userId)
-        val queryMap = request.getQueryStringMap
-
-        val src = queryMap.getOrDefault("src", "")
-        val algo = queryMap.getOrDefault("algo", "")
-        if (src == "") {
-          simpleErrorResponse(new NoSrcException)
-        } else if (algo == "") {
-          simpleErrorResponse(new NoAlgoException)
-        } else {
-          JobUtils.getInstance().addUserJob(userDAO, src, algo)
-          simpleSuccessResponse()
-        }
-      } catch {
-        case e: UserNotFoundException =>
-          e.printStackTrace()
-          simpleErrorResponse(e)
-      }
+    val queryMap = request.getQueryStringMap
+    try {
+      JobManager().create(request.getHeader(Job.FieldUserID), queryMap.getOrDefault("src", ""), queryMap.getOrDefault("algo", ""))
+      simpleSuccessResponse()
+    } catch {
+      case e: ApiException =>
+        e.printStackTrace()
+        simpleErrorResponse(e)
     }
   }
 
@@ -85,32 +63,14 @@ class JobRoute {
     *
     */
   def delete(request: Request, response: Response): String = {
-    val userId = request.getHeader(Job.FieldUserID)
-    val jobId = request.getQueryStringMap.getOrDefault(Job.FieldID, null)
-    if (userId == null) {
-      simpleErrorResponse(new NoUserException)
-    } else if (jobId == null) {
-      simpleErrorResponse(new NoJobException)
-    } else {
-      val userJobs = Job().selectAllUserJobs(userId)
-      for (jobDAO: JobDAO <- userJobs) {
-        if (jobDAO.fieldID == jobId.toInt) {
-          try {
-            val userDAO = User().selectUser(userId)
-            if (jobDAO.fieldState == 1) {
-              // cancel job
-              JobUtils.getInstance().cancelUserJob(userDAO, jobId)
-            }
-            Job().deleteJob(jobId)
-          } catch {
-            case e: UserNotFoundException =>
-              e.printStackTrace()
-              simpleErrorResponse(e)
-          }
-        }
-      }
-
+    val queryMap = request.getQueryStringMap
+    try {
+      JobManager().delete(request.getHeader(Job.FieldUserID), queryMap.getOrDefault(Job.FieldID, null))
       simpleSuccessResponse()
+    } catch {
+      case e: ApiException =>
+        e.printStackTrace()
+        simpleErrorResponse(e)
     }
   }
 }

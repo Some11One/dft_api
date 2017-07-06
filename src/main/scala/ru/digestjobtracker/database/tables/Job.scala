@@ -10,6 +10,12 @@ import scala.collection.mutable.ListBuffer
 
 case class Job() extends DatabaseSettings {
 
+  /**
+    * Select all user jobs
+    *
+    * @param userId user id
+    * @return user jobs
+    */
   def selectAllUserJobs(userId: String): ListBuffer[JobDAO] = {
     val jobs = new ListBuffer[JobDAO]()
     val s = connect().createStatement()
@@ -40,6 +46,11 @@ case class Job() extends DatabaseSettings {
     }
   }
 
+  /**
+    * Remove job instance from DB
+    *
+    * @param jobId job id
+    */
   def deleteJob(jobId: String): Unit = {
     val s = connect().createStatement()
     try {
@@ -49,6 +60,13 @@ case class Job() extends DatabaseSettings {
     }
   }
 
+  /**
+    * Update job when it began to run
+    *
+    * @param jobId           job id
+    * @param state           new state (see 'insertJob' method params) = 2
+    * @param timestampCreate time when job began to run
+    */
   def updateJob(jobId: Int, state: Int, timestampCreate: Long): Unit = {
     val s = connect().createStatement()
     try {
@@ -63,22 +81,16 @@ case class Job() extends DatabaseSettings {
     }
   }
 
-  def updateJobKo(jobId: Int, state: Int, timestampCreate: Long,
-                  timestampEnd: Option[Long], error: Option[String]): Unit = {
-    val s = connect().createStatement()
-    try {
-      val res = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $jobId")
-      if (res.next()) {
-        s.execute(s"UPDATE $Table SET ( $FieldTimestampCreate, $FieldTimestampEnd, $FieldState, $FieldError) = ('$timestampCreate', '${timestampEnd.get}', '$state', '${error.get}') WHERE $FieldID = $jobId")
-      } else {
-        throw new JobNotFoundException()
-      }
-    } finally {
-      if (s != null) s.close()
-    }
-  }
-
-  def updateJobOk(jobId: Int, state: Int, timestampCreate: Long,
+  /**
+    * Update job after it ran - OK (no errors)
+    *
+    * @param jobId           job it
+    * @param state           new state (see 'insertJob' method params) = 3
+    * @param timestampCreate time when job began to run
+    * @param timestampEnd    time when job ended
+    * @param hex             result of 'algo'
+    */
+  def updateJobOK(jobId: Int, state: Int, timestampCreate: Long,
                   timestampEnd: Option[Long], hex: Option[String]): Unit = {
     val s = connect().createStatement()
     try {
@@ -93,6 +105,39 @@ case class Job() extends DatabaseSettings {
     }
   }
 
+  /**
+    * Update job after it ran - KO (errors)
+    *
+    * @param jobId           job it
+    * @param state           new state (see 'insertJob' method params) = 4
+    * @param timestampCreate time when job began to run
+    * @param timestampEnd    time when job ended
+    * @param error           text of an error which occurred while job was running
+    */
+  def updateJobKO(jobId: Int, state: Int, timestampCreate: Long,
+                  timestampEnd: Option[Long], error: Option[String]): Unit = {
+    val s = connect().createStatement()
+    try {
+      val res = s.executeQuery(s"SELECT * FROM $Table WHERE $FieldID = $jobId")
+      if (res.next()) {
+        s.execute(s"UPDATE $Table SET ( $FieldTimestampCreate, $FieldTimestampEnd, $FieldState, $FieldError) = ('$timestampCreate', '${timestampEnd.get}', '$state', '${error.get}') WHERE $FieldID = $jobId")
+      } else {
+        throw new JobNotFoundException()
+      }
+    } finally {
+      if (s != null) s.close()
+    }
+  }
+
+  /**
+    * Insert job into DB
+    *
+    * @param userId user id who initiated job
+    * @param state  job state - 1, 2, 3 or 4. 1 - job is not running, 2 - job is running, 3 - job is done, 4 - error while running a job
+    * @param src    source for a file to feed into 'algo'
+    * @param algo   hex algo to run on 'src'
+    * @return job instance
+    */
   def insertJob(userId: Int, state: Int, src: String, algo: String): JobDAO = {
     val s = connect().createStatement()
     try {
@@ -126,8 +171,7 @@ case class Job() extends DatabaseSettings {
 object Job {
   val Table: String = "Jobs"
 
-  val FieldID = "job_id"
-  val FieldUserID = "user_id"
+  val FieldID = "job_id" // pk
   val FieldState = "state"
   val FieldTimestampCreate = "timestamp_create"
   val FieldTimestampEnd = "timestamp_end"
@@ -135,6 +179,8 @@ object Job {
   val FieldAlgo = "algo"
   val FieldHex = "hex"
   val FieldError = "error"
+
+  val FieldUserID = "user_id" // fk
 }
 
 case class JobDAO(fieldID: Int, fieldUserID: Int, fieldState: Int,
